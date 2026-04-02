@@ -302,8 +302,6 @@ nextBtn.addEventListener("click", () => {
   window.location.href = BACK_FORM_BASE + score;
 });
 
-    window.webkit?.messageHandlers?.ios?.postMessage({type:"trial", payload: rec});
-  });
 
   const ro = new ResizeObserver(() => {
     if (initInProgress) return;
