@@ -294,12 +294,13 @@
     forceReset();
   });
 
-  nextBtn.addEventListener("click", () => {
-    const rec = {
-      "時刻": nowLocalStamp(),
-      "IOSスコア": currentV,
-      "絶対座標": selfCenterClientX()
-    };
+const BACK_FORM_BASE =
+  "https://docs.google.com/forms/d/e/1FAIpQLScpA3QmxlR5Wy-8ifmj74YHeU1cLSgXLHb5q6WNMcaufE9TpA/viewform?usp=pp_url&entry.1148298034=";
+
+nextBtn.addEventListener("click", () => {
+  const score = encodeURIComponent(currentV);
+  window.location.href = BACK_FORM_BASE + score;
+});
 
     window.webkit?.messageHandlers?.ios?.postMessage({type:"trial", payload: rec});
   });
