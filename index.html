@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>IOS Scale</title>
+
+<style>
+  html, body{
+    margin:0;
+    height:100%;
+    overflow:hidden;
+    font-family:-apple-system, system-ui, sans-serif;
+    background:#fff;
+  }
+
+  :root{
+    --instr-h: 120px;
+    --bottombar-h: 60px;
+    --bottombar-gap: 14px;
+  }
+
+  .instruction{
+    position:fixed;
+    top: calc(env(safe-area-inset-top) + 16px);
+    left: 16px;
+    right: 16px;
+    text-align:center;
+    font-size: clamp(13px, 1.2vw, 16px);
+    line-height:1.35;
+    opacity:0.88;
+    pointer-events:none;
+    z-index:10;
+  }
+  .instruction .lead{
+    display:block;
+    font-size: clamp(15px, 1.6vw, 20px);
+    line-height:1.35;
+    opacity:0.95;
+    margin-bottom:6px;
+  }
+  .instruction .emph{
+    font-weight:800;
+    text-decoration:underline;
+    text-underline-offset:2px;
+  }
+  .instruction .note{
+    display:block;
+    font-size:1em;
+    opacity:0.9;
+    margin-top:2px;
+  }
+
+  .bottomBar{
+    position:fixed;
+    left:12px;
+    right:12px;
+    bottom: calc(env(safe-area-inset-bottom) + 12px);
+    display:flex;
+    gap:12px;
+    z-index:20;
+  }
+  .btn{
+    flex:1;
+    padding:14px;
+    border-radius:14px;
+    border:1px solid rgba(0,0,0,0.18);
+    background:rgba(255,255,255,0.95);
+    font-size:16px;
+    font-weight:800;
+  }
+
+  #resetBtn{
+    text-align:left;
+  }
+  #nextBtn{
+    text-align:right;
+  }
+
+  #stage{
+    position:fixed;
+    left:0;
+    right:0;
+    top: calc(env(safe-area-inset-top) + 16px + var(--instr-h));
+    height: calc(100dvh
+      - (env(safe-area-inset-top) + 16px + var(--instr-h))
+      - (env(safe-area-inset-bottom) + 12px + var(--bottombar-h) + var(--bottombar-gap))
+    );
+    width:100vw;
+    display:block;
+    touch-action:none;
+    -webkit-user-select:none;
+    user-select:none;
+  }
+
+  @media (orientation: landscape) {
+    :root{ --instr-h: 84px; }
+    .instruction{ font-size:14px; line-height:1.25; }
+    .instruction .lead{ font-size:16px; line-height:1.25; margin-bottom:4px; }
+  }
+</style>
+</head>
+
+<body>
+
+<div class="instruction">
+  <span class="lead">左の円はあなた、右の円はSTU48を表しています。</span>
+  <span class="lead">
+    現在のあなたの感覚として、<span class="emph">あなた自身と STU48 との心理的な近さを、円の重なりで表現</span>してください
+  </span>
+  <span class="note">※ 左側の円をドラッグして動かしてください。</span>
+  <span class="note">※ 位置が決まったら、右下の「次へ」ボタンを押してください。</span>
+</div>
+
+<svg id="stage" aria-label="IOS Scale">
+  <circle id="other" cx="0" cy="0" r="1" fill="none" stroke="black" stroke-width="6"/>
+  <circle id="self"  cx="0" cy="0" r="1" fill="none" stroke="black" stroke-width="6"/>
+</svg>
+
+<div class="bottomBar">
+  <button id="resetBtn" class="btn">リセット</button>
+  <button id="nextBtn" class="btn">次へ</button>
+</div>
+
+<script>
+  let currentV = 0;
+  let dragging = false;
+  let initInProgress = false;
+
+  const stage = document.getElementById("stage");
+  const self = document.getElementById("self");
+  const other = document.getElementById("other");
+  const resetBtn = document.getElementById("resetBtn");
+  const nextBtn = document.getElementById("nextBtn");
+
+  let VW = 1000, VH = 1000;
+  let R = 180;
+  let otherX = 0, otherY = 0;
+
+  function clamp(n, a, b){ return Math.max(a, Math.min(b, n)); }
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+  function nowLocalStamp(){
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+
+  function recalcLayout(){
+    const rect = stage.getBoundingClientRect();
+    const w = Math.round(rect.width);
+    const h = Math.round(rect.height);
+    if (w <= 0 || h <= 0) return false;
+
+    VW = w;
+    VH = h;
+    stage.setAttribute("viewBox", `0 0 ${VW} ${VH}`);
+
+    const short = Math.min(VW, VH);
+    R = clamp(short * 0.26, 90, 220);
+
+    otherX = (VW / 2) + R;
+    otherY = VH * 0.52;
+
+    const sw = clamp(R * 0.04, 4, 10);
+    self.setAttribute("stroke-width", sw);
+    other.setAttribute("stroke-width", sw);
+
+    other.setAttribute("r", R);
+    self.setAttribute("r", R);
+    other.setAttribute("cx", otherX);
+    other.setAttribute("cy", otherY);
+
+    return true;
+  }
+
+  function applyV(v){
+    const vv = clamp(Math.round(v), 0, 10);
+    currentV = vv;
+
+    const d = 2 * R * (1 - vv / 10);
+    const selfX = otherX - d;
+
+    self.setAttribute("cx", selfX);
+    self.setAttribute("cy", otherY);
+  }
+
+  function forceReset(){
+    dragging = false;
+    currentV = 0;
+    applyV(0);
+  }
+
+  async function waitForStableCTMAndRect(){
+    let lastW = -1, lastH = -1;
+    let lastA = null, lastD = null, stable = 0;
+
+    for (let i = 0; i < 150; i++){
+      await new Promise(r => requestAnimationFrame(() => r()));
+
+      const rect = stage.getBoundingClientRect();
+      const w = Math.round(rect.width);
+      const h = Math.round(rect.height);
+
+      const ctm = stage.getScreenCTM();
+      const a = ctm ? Number(ctm.a.toFixed(6)) : null;
+      const d = ctm ? Number(ctm.d.toFixed(6)) : null;
+
+      const ok = (w > 0 && h > 0 && ctm && isFinite(a) && isFinite(d) && a !== 0 && d !== 0);
+
+      if (ok && w === lastW && h === lastH && a === lastA && d === lastD){
+        stable++;
+        if (stable >= 3) return true;
+      } else {
+        stable = 0;
+        lastW = w;
+        lastH = h;
+        lastA = a;
+        lastD = d;
+      }
+
+      await sleep(8);
+    }
+    return false;
+  }
+
+  function svgPointFromEvent(e){
+    const p = ("touches" in e && e.touches.length) ? e.touches[0] : e;
+    const pt = stage.createSVGPoint();
+    pt.x = p.clientX;
+    pt.y = p.clientY;
+    const ctm = stage.getScreenCTM();
+    if (!ctm) return {x:0, y:0};
+    return pt.matrixTransform(ctm.inverse());
+  }
+
+  function snapByX(xSvg){
+    const minX = otherX - 2 * R;
+    const maxX = otherX;
+    const cx = clamp(xSvg, minX, maxX);
+
+    const d = otherX - cx;
+    const v = Math.round(10 * (1 - d / (2 * R)));
+    applyV(v);
+  }
+
+  function selfCenterClientX(){
+    const cx = parseFloat(self.getAttribute("cx")) || 0;
+    const cy = parseFloat(self.getAttribute("cy")) || 0;
+    const pt = stage.createSVGPoint();
+    pt.x = cx;
+    pt.y = cy;
+
+    const ctm = stage.getScreenCTM();
+    if (!ctm) return "";
+    const sp = pt.matrixTransform(ctm);
+    return Math.round(sp.x);
+  }
+
+  async function initializeTask(){
+    initInProgress = true;
+    await waitForStableCTMAndRect();
+    recalcLayout();
+    await new Promise(r => requestAnimationFrame(() => r()));
+    recalcLayout();
+    forceReset();
+
+    setTimeout(() => {
+      if (!recalcLayout()) return;
+      if (currentV === 0) applyV(0);
+    }, 600);
+
+    initInProgress = false;
+  }
+
+  stage.addEventListener("pointerdown", (e) => {
+    dragging = true;
+    e.preventDefault();
+    const p = svgPointFromEvent(e);
+    snapByX(p.x);
+  }, {passive:false});
+
+  stage.addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    e.preventDefault();
+    const p = svgPointFromEvent(e);
+    snapByX(p.x);
+  }, {passive:false});
+
+  stage.addEventListener("pointerup", () => dragging = false);
+  stage.addEventListener("pointercancel", () => dragging = false);
+
+  resetBtn.addEventListener("click", () => {
+    forceReset();
+  });
+
+  nextBtn.addEventListener("click", () => {
+    const rec = {
+      "時刻": nowLocalStamp(),
+      "IOSスコア": currentV,
+      "絶対座標": selfCenterClientX()
+    };
+
+    window.webkit?.messageHandlers?.ios?.postMessage({type:"trial", payload: rec});
+  });
+
+  const ro = new ResizeObserver(() => {
+    if (initInProgress) return;
+    if (recalcLayout()) applyV(currentV);
+  });
+  ro.observe(stage);
+
+  window.addEventListener("pageshow", () => {
+    initializeTask();
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      initializeTask();
+    }
+  });
+
+  initializeTask();
+</script>
+
+</body>
+</html>
